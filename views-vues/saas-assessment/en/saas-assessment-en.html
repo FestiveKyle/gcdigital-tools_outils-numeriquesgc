@@ -1,0 +1,31 @@
+---
+layout: default
+title: SaaS Assessment Tool (Draft)
+lang: en
+altLang: fr
+altLangPage: saas-assessment-fr
+collectionDirectory: views-vues/saas-assessment
+welcome:
+  heading: SaaS Assessment Triage Tool
+  intro1: This tool will help determine SaaS requirements.
+  intro2: More explanation
+questionnaire:
+  heading: Questionnaire
+  questions:
+    "1":
+      question: Website of SaaS web address
+    "2":
+      question: Data Classification
+      prompt: Select a classification
+      options: [
+        Unclassified,
+        Protected A,
+        Protected B
+      ]
+---
+
+{% include views-vues/saas-assessment/saas-assessment-intro.html %}
+
+{% include views-vues/saas-assessment/saas-assessment-questionnaire.html %}
+
+
