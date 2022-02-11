@@ -24,8 +24,22 @@ questionnaire:
       ]
 ---
 
+<script>
+  function getFormData() {
+    let elements = document.getElementById("saas-assessment-form").elements;
+    let obj = {};
+    for (let i = 0; i < elements.length - 1; i++) {
+      let item = elements.item(i);
+      obj[item.id] = item.value;
+    }
+    console.log(obj);
+  }
+</script>
+
 {% include views-vues/saas-assessment/saas-assessment-intro.html %}
 
 {% include views-vues/saas-assessment/saas-assessment-questionnaire.html %}
+
+<button onclick="getFormData()">get form data</button>
 
 
