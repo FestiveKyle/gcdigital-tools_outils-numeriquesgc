@@ -23,12 +23,18 @@ questionnaire:
         Protected B
       ]
 ---
-<!-- TODO: Turn 'Get Worksheet' button into 'Print' button, turn HTML into MD, fix CORS error on SSLLabs fetch, implement inherit logic in suggestAssessmentState() -->
+<!--
+  TODO:
+    turn HTML into MD,
+    fix CORS error on SSLLabs fetch,
+    implement inherit logic in suggestAssessmentState()
+-->
 <script type="text/javascript" src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 <script>
   async function getSpreadsheet() {
     let response
     let spreadsheetArrayBuffer
+    let suggestedState
 
     try {
       response = await fetch('/gcdigital-tools_outils-numeriquesgc/CCCS MEDIUM - Assessors Workbook - Local Assessment.xlsx')
@@ -42,27 +48,38 @@ questionnaire:
       console.log("Error when creating arrayBuffer from spreadsheet: ", e)
     }
 
+    try {
+      suggestedState = await updateRowSaaS_SC8();
+    } catch (e) {
+      console.log("Error when assessing suggested state: ", e)
+    }
+    console.log(suggestedState)
+
     const spreadsheetData = new Uint8Array(spreadsheetArrayBuffer)
     const workbook = XLSX.read(spreadsheetData, { type: "array" })
 
     const firstWorksheet = workbook.SheetNames[0]
     const worksheet = workbook.Sheets["SC"]
-    console.log(workbook)
-    console.log(worksheet)
-    console.log(worksheet["M20"])
+    // console.log(workbook)
+    // console.log(worksheet)
 
     const selectedCellNameObj = workbook.Workbook.Names.find((nameObject) => {
       return nameObject.Name === 'SC8_DECISION'
     })
     console.log(`Retrieved cell "SC8_DECISION"`, selectedCellNameObj)
 
-    // const cellRange = selectedCellNameObj.Ref.split('!')[1]
-    // console.log(`Cell range for "AC_!": ${cellRange}`)
+    let cell = worksheet['M20'];
+    console.log(cell)
 
-    // const cellNumber = cellRange.replaceAll('$', '')
-    // console.log(`Cell number of "${cellRange}": `, cellNumber)
+    if (typeof cell === 'undefined' || typeof cell?.v === 'undefined') {
+      XLSX.utils.sheet_add_aoa(worksheet, [[suggestedState]], {origin: 'M20'});
+    } else {
+      cell.v = suggestedState;
+    }
 
-    // console.log(`Cell info for cell "${cellNumber}": `, worksheet[cellNumber])
+    // write to new file
+    // formatting from OLD file will be lost!
+    XLSX.writeFile(workbook, 'CSSS Assessor Workbook.xlsx');
   }
 
   function getFormData() {
@@ -108,7 +125,7 @@ questionnaire:
     // }
 
     try {
-      const res = await fetch(address); 
+      const res = await fetch(address);
       const data = await res.json();
       // console.log("data:", data);
       return data;
@@ -130,11 +147,11 @@ questionnaire:
       console.error("Error retrieving data:", err);
       return -1;
     }
-    
+
     analysis.endpoints.forEach(({ ipAddress, statusMessage, details }) => {
       // handle error status messages
       if (
-        statusMessage === "No secure protocols supported" || 
+        statusMessage === "No secure protocols supported" ||
         statusMessage === "Internal Server error" ||
         statusMessage === "Unable to connect to the server"
       ) {
@@ -228,7 +245,7 @@ questionnaire:
       return -1;
     }
     console.log(results);
-    suggestAssessmentState(results, "SC8", "S_DB_S", false, true);
+    return suggestAssessmentState(results, "SC8", "S_DB_S", false, true);
   }
 
   function suggestAssessmentState(results, row, worksheet, canInherit = true, canBeFullyMet = false) {
@@ -248,7 +265,7 @@ questionnaire:
     if (canInherit) {
       console.log("can inherit");
     }
-    
+
     if (results.length > 0) {
       results.forEach(({ returnValue, message }) => {
         if (returnValue >= 1) {
@@ -297,7 +314,7 @@ questionnaire:
         }
       } else {
         if (
-          (decisionAidPositive.length > 0 && decisionAidNegative.length > 0) || 
+          (decisionAidPositive.length > 0 && decisionAidNegative.length > 0) ||
           (decisionAidPositive.length > 0 && decisionAidNegative.length === 0)
         ) {
           suggestedState = "Partial";
@@ -320,7 +337,8 @@ questionnaire:
       }
     }
 
-    console.log("Suggested State: ", suggestedState);
+    console.log("Suggested State: ", suggestedState)
+    return suggestedState;
   }
 
 </script>
