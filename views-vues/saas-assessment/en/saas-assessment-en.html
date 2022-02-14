@@ -239,7 +239,7 @@ questionnaire:
     let suggestedState = "TBD";
     let inherited = "";
     let outOfScope = false;
-    let isInherited = false
+    let isInherited = false;
 
     intTier = getTier();
     console.log("getTier() == ", intTier) ;
@@ -264,42 +264,35 @@ questionnaire:
       })
 
       // print all messages
-      if (decisionAidPositive.length > 0) {
-        console.log("Positives:", decisionAidPositive.length)
-        // decisionAidPositive.forEach((message) => {
-        //   console.log(message);
-        // })
-      }
-      if (decisionAidNegative.length > 0) {
-        console.log("Negatives:", decisionAidNegative.length);
-        // decisionAidPositive.forEach((message) => {
-        //   console.log(message);
-        // })
-      }
-      if (decisionAidNeutral.length > 0) {
-        console.log("Neutral:", decisionAidNeutral.length);
-        // decisionAidPositive.forEach((message) => {
-        //   console.log(message);
-        // })
-      }
+      // if (decisionAidPositive.length > 0) {
+      //   console.log("Positives:", decisionAidPositive.length)
+      //   // decisionAidPositive.forEach((message) => {
+      //   //   console.log(message);
+      //   // })
+      // }
+      // if (decisionAidNegative.length > 0) {
+      //   console.log("Negatives:", decisionAidNegative.length);
+      //   // decisionAidPositive.forEach((message) => {
+      //   //   console.log(message);
+      //   // })
+      // }
+      // if (decisionAidNeutral.length > 0) {
+      //   console.log("Neutral:", decisionAidNeutral.length);
+      //   // decisionAidPositive.forEach((message) => {
+      //   //   console.log(message);
+      //   // })
+      // }
 
-      // TODO
       if (canBeFullyMet) {
-        // console.log("can be fully met");
         if (decisionAidPositive.length > 0 && decisionAidNegative.length > 0){
-          // console.log("Partial");
           suggestedState = "Partial";
         } else if (decisionAidPositive.length > 0 && decisionAidNegative.length === 0) {
-          // console.log("Met");
           suggestedState = "Met";
         } else if (decisionAidPositive.length === 0 && decisionAidNegative.length === 0 && decisionAidNeutral.length > 0) {
-          // console.log("None");
           suggestedState = "None";
         } else if (decisionAidPositive.length === 0 && decisionAidNegative.length > 0) {
-          // console.log("Not Met");
           suggestedState = "Not Met";
         } else {
-          // console.log("None");
           suggestedState = "None";
         }
       } else {
@@ -307,16 +300,12 @@ questionnaire:
           (decisionAidPositive.length > 0 && decisionAidNegative.length > 0) || 
           (decisionAidPositive.length > 0 && decisionAidNegative.length === 0)
         ) {
-          // console.log("Partial");
           suggestedState = "Partial";
         } else if (decisionAidPositive.length === 0 && decisionAidNegative.length === 0 && decisionAidNeutral.length > 0) {
-          // console.log("None");
           suggestedState = "None";
         } else if (decisionAidPositive.length === 0 && decisionAidNegative.length > 0) {
-          // console.log("Not Met");
           suggestedState = "Not Met";
         } else {
-          // console.log("None");
           suggestedState = "None";
         }
       }
@@ -338,14 +327,7 @@ questionnaire:
 
 {% include views-vues/saas-assessment/saas-assessment-intro.html %}
 
-<button onclick="getSpreadsheet()">Get worksheet</button>
-<a href="/gcdigital-tools_outils-numeriquesgc/CCCS MEDIUM - Assessors Workbook - Local Assessment.xlsx" download>
-  <button>Print</button>
-</a>
+<button onclick="getSpreadsheet()">Print</button>
 
 {% include views-vues/saas-assessment/saas-assessment-questionnaire.html %}
-
-<button onclick="getFormData()">get form data</button>
-<button onclick="updateRowSaaS_SC8()">foobar</button>
-
 
