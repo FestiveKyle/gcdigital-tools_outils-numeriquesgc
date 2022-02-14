@@ -6,48 +6,4 @@
 
   <p>{{ page.welcome.intro2 }}</p>
 
-  <script type="text/javascript" src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
-  <script>
-    async function getSpreadsheet() {
-      let response
-      let spreadsheetArrayBuffer
-
-      try {
-        response = await fetch('/gcdigital-tools_outils-numeriquesgc/CCCS MEDIUM - Assessors Workbook - Local Assessment.xlsx')
-      } catch (e) {
-        console.log("Error when fetching assessment spreadsheet: ", e)
-      }
-
-      try {
-        spreadsheetArrayBuffer = await response.arrayBuffer()
-      } catch (e) {
-        console.log("Error when creating arrayBuffer from spreadsheet: ", e)
-      }
-
-      const spreadsheetData = new Uint8Array(spreadsheetArrayBuffer)
-      const workbook = XLSX.read(spreadsheetData, { type: "array" })
-
-      const firstWorksheet = workbook.SheetNames[0]
-      const worksheet = workbook.Sheets["CCCS MEDIUM"]
-      console.log(workbook)
-      console.log(worksheet)
-      console.log(worksheet["A1"])
-
-      const selectedCellNameObj = workbook.Workbook.Names.find((nameObject) => {
-        return nameObject.Name === 'AC_1'
-      })
-      console.log(`Retrieved cell "AC_1"`, selectedCellNameObj)
-
-      const cellRange = selectedCellNameObj.Ref.split('!')[1]
-      console.log(`Cell range for "AC_!": ${cellRange}`)
-
-      const cellNumber = cellRange.replaceAll('$', '')
-      console.log(`Cell number of "${cellRange}": `, cellNumber)
-
-      console.log(`Cell info for cell "${cellNumber}": `, worksheet[cellNumber])
-    }
-  </script>
-
-  <button onclick="getSpreadsheet()">Get worksheet</button>
-
 </section>

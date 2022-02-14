@@ -24,7 +24,47 @@ questionnaire:
       ]
 ---
 
+<script type="text/javascript" src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 <script>
+  async function getSpreadsheet() {
+    let response
+    let spreadsheetArrayBuffer
+
+    try {
+      response = await fetch('/gcdigital-tools_outils-numeriquesgc/CCCS MEDIUM - Assessors Workbook - Local Assessment.xlsx')
+    } catch (e) {
+      console.log("Error when fetching assessment spreadsheet: ", e)
+    }
+
+    try {
+      spreadsheetArrayBuffer = await response.arrayBuffer()
+    } catch (e) {
+      console.log("Error when creating arrayBuffer from spreadsheet: ", e)
+    }
+
+    const spreadsheetData = new Uint8Array(spreadsheetArrayBuffer)
+    const workbook = XLSX.read(spreadsheetData, { type: "array" })
+
+    const firstWorksheet = workbook.SheetNames[0]
+    const worksheet = workbook.Sheets["SC"]
+    console.log(workbook)
+    console.log(worksheet)
+    console.log(worksheet["M20"])
+
+    const selectedCellNameObj = workbook.Workbook.Names.find((nameObject) => {
+      return nameObject.Name === 'SC8_DECISION'
+    })
+    console.log(`Retrieved cell "SC8_DECISION"`, selectedCellNameObj)
+
+    // const cellRange = selectedCellNameObj.Ref.split('!')[1]
+    // console.log(`Cell range for "AC_!": ${cellRange}`)
+
+    // const cellNumber = cellRange.replaceAll('$', '')
+    // console.log(`Cell number of "${cellRange}": `, cellNumber)
+
+    // console.log(`Cell info for cell "${cellNumber}": `, worksheet[cellNumber])
+  }
+
   function getFormData() {
     let elements = document.getElementById("saas-assessment-form").elements;
     let obj = {};
@@ -32,14 +72,280 @@ questionnaire:
       let item = elements.item(i);
       obj[item.id] = item.value;
     }
-    console.log(obj);
+    return obj;
   }
+
+  function getTier() {
+    const data = getFormData();
+    const dataClassification = data["question-2"];
+    if (dataClassification === 'Unclassified') return 0;
+    else if (dataClassification === 'Protected A') return 1;
+    else if (dataClassification === 'Protected B') return 2;
+    else return -1;
+  }
+
+  async function getTLSGuidance() {
+    const address = "https://raw.githubusercontent.com/CybercentreCanada/ITSP.40.062/main/transport-layer-security/tls-guidance.json";
+    try {
+      const res = await fetch(address);
+      const data = await res.json();
+      return data;
+    } catch (e) {
+      console.log("Error when fetching guidance: ", e);
+    }
+  }
+
+  async function getSSLLabsData() {
+    const data = getFormData();
+    const SaaSAddress = data["question-1"];
+    /* TODO: handle CORS error */
+    // const address = `https://api.ssllabs.com/api/v3/analyze?all=done&fromCache=on&maxAge=168&host=${SaaSAddress}`
+    const address = "/gcdigital-tools_outils-numeriquesgc/views-vues/saas-assessment/en/canada-ca_data.json"
+
+    // if (SaaSAddress === "") {
+    //   console.log("Please enter web address")
+    //   return -1;
+    // }
+
+    try {
+      const res = await fetch(address); 
+      const data = await res.json();
+      // console.log("data:", data);
+      return data;
+    } catch (e) {
+      console.log("Error when fetching guidance: ", e);
+    }
+  }
+
+  async function GCHTTPSRules() {
+    let guidance;
+    let analysis;
+    let results = [];
+
+    // get data
+    try {
+      guidance = await getTLSGuidance();
+      analysis = await getSSLLabsData();
+    } catch(err) {
+      console.error("Error retrieving data:", err);
+      return -1;
+    }
+    
+    analysis.endpoints.forEach(({ ipAddress, statusMessage, details }) => {
+      // handle error status messages
+      if (
+        statusMessage === "No secure protocols supported" || 
+        statusMessage === "Internal Server error" ||
+        statusMessage === "Unable to connect to the server"
+      ) {
+        // console.log("No secure protocols found on endpoint")
+        results = [{
+          returnValue: -10000,
+          decisionTypeAid: "C2",
+          message: "Error or no secure protocols found.",
+        }];
+      }
+
+      // investigate protocol ciphers
+      for (let i = 0; i < details.protocols.length; i++) {
+        const { version } = details.protocols[i];
+        // if TLS v1.3
+        if (version === "1.3") {
+          const { recommended, sufficient } = guidance.ciphers["1.3"];
+          details.suites[i].list.forEach(({ name }) => {
+            if (recommended.indexOf(name) > -1) {
+              results.push({
+                returnValue: 100,
+                decisionAidType: "C2",
+                message: `TLS 1.3 recommended cipher found: ${name}`
+              });
+            } else if (sufficient.indexOf(name) > -1) {
+              results.push({
+                returnValue: 99,
+                decisionAidType: "C2",
+                message: `TLS 1.3 sufficient cipher found: ${name}`
+              });
+            } else {
+              results.push({
+                returnValue: -1111,
+                decisionAidType: "C2",
+                message: `TLS 1.3 cipher not approved for use: ${name}`
+              });
+            }
+          })
+        }
+        // if TLS v1.2
+        else if (version === "1.2") {
+          const { recommended, sufficient, phase_out } = guidance.ciphers["1.2"];
+          details.suites[i].list.forEach(({ name }) => {
+            if (recommended.indexOf(name) > -1) {
+              results.push({
+                returnValue: 100,
+                decisionAidType: "C2",
+                message: `TLS 1.2 recommended cipher found: ${name}`
+              });
+            } else if (sufficient.indexOf(name) > -1) {
+              results.push({
+                returnValue: 99,
+                decisionAidType: "C2",
+                message: `TLS 1.2 sufficient cipher found: ${name}`
+              });
+            } else if (phase_out.indexOf(name) > -1) {
+              results.push({
+                returnValue: 98,
+                decisionAidType: "C2",
+                message: `The use of the following cipher is allowed, however it is being phased out: ${name}`
+              });
+            } else {
+              results.push({
+                returnValue: -1111,
+                decisionAidType: "C2",
+                message: `TLS 1.2 cipher not approved for use: ${name}`
+              });
+            }
+          })
+        }
+        // else bad TLS
+        else {
+          results.push({
+            returnValue: -1000,
+            decisionAidType: "C2",
+            message: `The use of TLS/SSL version ${version} is discouraged.`
+          });
+        }
+      }
+    });
+    return results;
+  }
+
+  async function updateRowSaaS_SC8() {
+    console.log("start update row SC8");
+    let results;
+    try {
+      results = await GCHTTPSRules();
+    } catch (err) {
+      console.error("Error when gathering results:", err);
+      return -1;
+    }
+    console.log(results);
+    suggestAssessmentState(results, "SC8", "S_DB_S", false, true);
+  }
+
+  function suggestAssessmentState(results, row, worksheet, canInherit = true, canBeFullyMet = false) {
+    let decisionAidFinal = "";
+    let decisionAidPositive = [];
+    let decisionAidNegative = [];
+    let decisionAidNeutral = [];
+    let suggestedState = "TBD";
+    let inherited = "";
+    let outOfScope = false;
+    let isInherited = false
+
+    intTier = getTier();
+    console.log("getTier() == ", intTier) ;
+
+    // TODO
+    if (canInherit) {
+      console.log("can inherit");
+    }
+    
+    if (results.length > 0) {
+      results.forEach(({ returnValue, message }) => {
+        if (returnValue >= 1) {
+          console.log("decisionAidPositive");
+          decisionAidPositive.push(message);
+        } else if (returnValue <= -1) {
+          console.log("decisionAidNegative");
+          decisionAidNegative.push(message);
+        } else { // returnValue === 0
+          console.log("decisionAidNeutral");
+          decisionAidNeutral.push(message);
+        }
+      })
+
+      // print all messages
+      if (decisionAidPositive.length > 0) {
+        console.log("Positives:", decisionAidPositive.length)
+        // decisionAidPositive.forEach((message) => {
+        //   console.log(message);
+        // })
+      }
+      if (decisionAidNegative.length > 0) {
+        console.log("Negatives:", decisionAidNegative.length);
+        // decisionAidPositive.forEach((message) => {
+        //   console.log(message);
+        // })
+      }
+      if (decisionAidNeutral.length > 0) {
+        console.log("Neutral:", decisionAidNeutral.length);
+        // decisionAidPositive.forEach((message) => {
+        //   console.log(message);
+        // })
+      }
+
+      // TODO
+      if (canBeFullyMet) {
+        // console.log("can be fully met");
+        if (decisionAidPositive.length > 0 && decisionAidNegative.length > 0){
+          // console.log("Partial");
+          suggestedState = "Partial";
+        } else if (decisionAidPositive.length > 0 && decisionAidNegative.length === 0) {
+          // console.log("Met");
+          suggestedState = "Met";
+        } else if (decisionAidPositive.length === 0 && decisionAidNegative.length === 0 && decisionAidNeutral.length > 0) {
+          // console.log("None");
+          suggestedState = "None";
+        } else if (decisionAidPositive.length === 0 && decisionAidNegative.length > 0) {
+          // console.log("Not Met");
+          suggestedState = "Not Met";
+        } else {
+          // console.log("None");
+          suggestedState = "None";
+        }
+      } else {
+        if (
+          (decisionAidPositive.length > 0 && decisionAidNegative.length > 0) || 
+          (decisionAidPositive.length > 0 && decisionAidNegative.length === 0)
+        ) {
+          // console.log("Partial");
+          suggestedState = "Partial";
+        } else if (decisionAidPositive.length === 0 && decisionAidNegative.length === 0 && decisionAidNeutral.length > 0) {
+          // console.log("None");
+          suggestedState = "None";
+        } else if (decisionAidPositive.length === 0 && decisionAidNegative.length > 0) {
+          // console.log("Not Met");
+          suggestedState = "Not Met";
+        } else {
+          // console.log("None");
+          suggestedState = "None";
+        }
+      }
+      if (outOfScope || isInherited) {
+        suggestedState = inherited;
+      }
+    } else {
+      if (outOfScope || isInherited) {
+        suggestedState = inherited;
+      } else {
+        suggestedState = "None";
+      }
+    }
+
+    console.log("Suggested State: ", suggestedState);
+  }
+
 </script>
 
 {% include views-vues/saas-assessment/saas-assessment-intro.html %}
 
+<button onclick="getSpreadsheet()">Get worksheet</button>
+<a href="/gcdigital-tools_outils-numeriquesgc/CCCS MEDIUM - Assessors Workbook - Local Assessment.xlsx" download>
+  <button>Print</button>
+</a>
+
 {% include views-vues/saas-assessment/saas-assessment-questionnaire.html %}
 
 <button onclick="getFormData()">get form data</button>
+<button onclick="updateRowSaaS_SC8()">foobar</button>
 
 
