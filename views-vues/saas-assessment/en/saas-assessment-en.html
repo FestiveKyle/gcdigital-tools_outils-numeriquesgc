@@ -23,19 +23,11 @@ questionnaire:
         Protected B
       ]
 ---
-<!--
-  TODO:
-    turn HTML into MD,
-    fix CORS error on SSLLabs fetch <== wait for cyberGRX,
-    implement inherit logic in suggestAssessmentState(),
-    add reult to UI
--->
 <script type="text/javascript" src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 <script>
-  async function getSpreadsheet(worksheetName, cellName) {
+  async function getSpreadsheet(worksheetName, cellName, suggestedState) {
     let response
     let spreadsheetArrayBuffer
-    let suggestedState
 
     try {
       response = await fetch('/gcdigital-tools_outils-numeriquesgc/CCCS MEDIUM - Assessors Workbook - Local Assessment.xlsx')
@@ -59,25 +51,17 @@ questionnaire:
     console.log(`Retrieved cell ${cellName}`, selectedCellNameObj)
 
     let cell = workbook[selectedCellNameObj.Ref];
-    console.log("cell: ", cell)
-
-    const cellRange = selectedCellNameObj.Ref.split('!')[1]
-    console.log(`Cell range for "AC_!": ${cellRange}`)
-
-    const cellNumber = cellRange.replaceAll('$', '')
-    console.log(`Cell number of "${cellRange}": `, cellNumber)
-
-    console.log(`Cell info for cell "${cellNumber}": `, worksheet[cellNumber])
+    const cellNumber = selectedCellNameObj.Ref.split('!')[1].replaceAll('$', '')
 
     if (typeof cell === 'undefined' || typeof cell?.v === 'undefined') {
-      XLSX.utils.sheet_add_aoa(worksheet, [[suggestedState]], {origin: cellName});
+      XLSX.utils.sheet_add_aoa(worksheet, [[suggestedState]], {origin: cellNumber});
     } else {
       cell.v = suggestedState;
     }
 
     // write to new file
     // formatting from OLD file will be lost!
-    // XLSX.writeFile(workbook, 'CSSS Assessor Workbook.xlsx');
+    XLSX.writeFile(workbook, 'CSSS Assessor Workbook.xlsx');
   }
 
   function getFormData() {
@@ -113,15 +97,12 @@ questionnaire:
   async function requestScan() {
     const data = getFormData();
     const SaaSAddress = data["question-1"];
-    /* TODO: handle CORS error */
-    // const address = `https://api.ssllabs.com/api/v3/analyze?all=done&fromCache=on&maxAge=168&host=${SaaSAddress}`
-    // const address = "/gcdigital-tools_outils-numeriquesgc/views-vues/saas-assessment/en/canada-ca_data.json"
-    const address = `http://localhost:8000/scan/canada.ca`
+    const address = `http://localhost:8000/scan/${SaaSAddress}`
 
-    // if (SaaSAddress === "") {
-    //   console.log("Please enter web address")
-    //   return -1;
-    // }
+    if (SaaSAddress === "") {
+      console.log("Please enter web address")
+      return -1;
+    }
 
     try {
       const res = await fetch(address);
@@ -145,12 +126,11 @@ questionnaire:
       return -1;
     }
 
-    analysis.results.forEach(({ ipAddress, 'connectivity_status': statusMessage, details }) => {
+    analysis.results.forEach(({ ipAddress, 'connectivity_status': statusMessage, scan_result }) => {
       // handle error status messages
       if (
         statusMessage === "ERROR"
       ) {
-        // console.log("No secure protocols found on endpoint")
         results = [{
           returnValue: -10000,
           decisionTypeAid: "C2",
@@ -158,74 +138,77 @@ questionnaire:
         }];
       }
 
-      // investigate protocol ciphers
-      for (let i = 0; i < details.protocols.length; i++) {
-        const { version } = details.protocols[i];
-        // if TLS v1.3
-        if (version === "1.3") {
-          const { recommended, sufficient } = guidance.ciphers["1.3"];
-          details.suites[i].list.forEach(({ name }) => {
-            if (recommended.indexOf(name) > -1) {
+      Object.keys(scan_result).forEach((v) => {
+        if (scan_result[v].result) {
+          const { tls_version_used, accepted_cipher_suites, rejected_cipher_suites } = scan_result[v]?.result;
+          if (tls_version_used === "TLS_1_3") {
+            const { recommended, sufficient } = guidance.ciphers["1.3"];
+            accepted_cipher_suites.forEach(({ cipher_suite }) => {
+              const { name } = cipher_suite;
+              if (recommended.indexOf(name) > -1) {
+                results.push({
+                  returnValue: 100,
+                  decisionAidType: "C2",
+                  message: `TLS 1.3 recommended cipher found: ${name}`
+                });
+              } else if (sufficient.indexOf(name) > -1) {
+                results.push({
+                  returnValue: 99,
+                  decisionAidType: "C2",
+                  message: `TLS 1.3 sufficient cipher found: ${name}`
+                });
+              } else {
+                results.push({
+                  returnValue: -1111,
+                  decisionAidType: "C2",
+                  message: `TLS 1.3 cipher not approved for use: ${name}`
+                });
+              }
+            });
+
+          }
+          else if (tls_version_used === "TLS_1_2") {
+            const { recommended, sufficient, phase_out } = guidance.ciphers["1.2"];
+            accepted_cipher_suites.forEach(({ cipher_suite }) => {
+              const { name } = cipher_suite;
+              if (recommended.indexOf(name) > -1) {
+                results.push({
+                  returnValue: 100,
+                  decisionAidType: "C2",
+                  message: `TLS 1.2 recommended cipher found: ${name}`
+                });
+              } else if (sufficient.indexOf(name) > -1) {
+                results.push({
+                  returnValue: 99,
+                  decisionAidType: "C2",
+                  message: `TLS 1.2 sufficient cipher found: ${name}`
+                });
+              } else if (phase_out.indexOf(name) > -1) {
+                results.push({
+                  returnValue: 98,
+                  decisionAidType: "C2",
+                  message: `The use of the following cipher is allowed, however it is being phased out: ${name}`
+                });
+              } else {
+                results.push({
+                  returnValue: -1111,
+                  decisionAidType: "C2",
+                  message: `TLS 1.2 cipher not approved for use: ${name}`
+                });
+              }
+            });
+          }
+          else {
+            if (accepted_cipher_suites.length > 0) {
               results.push({
-                returnValue: 100,
+                returnValue: -1000,
                 decisionAidType: "C2",
-                message: `TLS 1.3 recommended cipher found: ${name}`
-              });
-            } else if (sufficient.indexOf(name) > -1) {
-              results.push({
-                returnValue: 99,
-                decisionAidType: "C2",
-                message: `TLS 1.3 sufficient cipher found: ${name}`
-              });
-            } else {
-              results.push({
-                returnValue: -1111,
-                decisionAidType: "C2",
-                message: `TLS 1.3 cipher not approved for use: ${name}`
-              });
+                message: `The use of ${tls_version_used} is discouraged.`
+              }); 
             }
-          })
+          }
         }
-        // if TLS v1.2
-        else if (version === "1.2") {
-          const { recommended, sufficient, phase_out } = guidance.ciphers["1.2"];
-          details.suites[i].list.forEach(({ name }) => {
-            if (recommended.indexOf(name) > -1) {
-              results.push({
-                returnValue: 100,
-                decisionAidType: "C2",
-                message: `TLS 1.2 recommended cipher found: ${name}`
-              });
-            } else if (sufficient.indexOf(name) > -1) {
-              results.push({
-                returnValue: 99,
-                decisionAidType: "C2",
-                message: `TLS 1.2 sufficient cipher found: ${name}`
-              });
-            } else if (phase_out.indexOf(name) > -1) {
-              results.push({
-                returnValue: 98,
-                decisionAidType: "C2",
-                message: `The use of the following cipher is allowed, however it is being phased out: ${name}`
-              });
-            } else {
-              results.push({
-                returnValue: -1111,
-                decisionAidType: "C2",
-                message: `TLS 1.2 cipher not approved for use: ${name}`
-              });
-            }
-          })
-        }
-        // else bad TLS
-        else {
-          results.push({
-            returnValue: -1000,
-            decisionAidType: "C2",
-            message: `The use of TLS/SSL version ${version} is discouraged.`
-          });
-        }
-      }
+      })
     });
     return results;
   }
@@ -242,7 +225,7 @@ questionnaire:
     }
     console.log(results);
     suggestedState = suggestAssessmentState(results, "SC8", "S_DB_S", false, true);
-    await getSpreadsheet("SC", "SC8_DECISION");
+    await getSpreadsheet("SC", "SC8_DECISION", suggestedState);
   }
 
   function suggestAssessmentState(results, row, worksheet, canInherit = true, canBeFullyMet = false) {
@@ -330,5 +313,3 @@ questionnaire:
 
 <br />
 <button onclick="updateRowSaaS_SC8()">Print</button>
-
-
