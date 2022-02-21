@@ -26,12 +26,13 @@ questionnaire:
 <!--
   TODO:
     turn HTML into MD,
-    fix CORS error on SSLLabs fetch,
-    implement inherit logic in suggestAssessmentState()
+    fix CORS error on SSLLabs fetch <== wait for cyberGRX,
+    implement inherit logic in suggestAssessmentState(),
+    add reult to UI
 -->
 <script type="text/javascript" src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 <script>
-  async function getSpreadsheet() {
+  async function getSpreadsheet(worksheetName, cellName) {
     let response
     let spreadsheetArrayBuffer
     let suggestedState
@@ -48,38 +49,35 @@ questionnaire:
       console.log("Error when creating arrayBuffer from spreadsheet: ", e)
     }
 
-    try {
-      suggestedState = await updateRowSaaS_SC8();
-    } catch (e) {
-      console.log("Error when assessing suggested state: ", e)
-    }
-    console.log(suggestedState)
-
     const spreadsheetData = new Uint8Array(spreadsheetArrayBuffer)
     const workbook = XLSX.read(spreadsheetData, { type: "array" })
-
-    const firstWorksheet = workbook.SheetNames[0]
-    const worksheet = workbook.Sheets["SC"]
-    // console.log(workbook)
-    // console.log(worksheet)
+    const worksheet = workbook.Sheets[worksheetName]
 
     const selectedCellNameObj = workbook.Workbook.Names.find((nameObject) => {
-      return nameObject.Name === 'SC8_DECISION'
+      return nameObject.Name === cellName
     })
-    console.log(`Retrieved cell "SC8_DECISION"`, selectedCellNameObj)
+    console.log(`Retrieved cell ${cellName}`, selectedCellNameObj)
 
-    let cell = worksheet['M20'];
-    console.log(cell)
+    let cell = workbook[selectedCellNameObj.Ref];
+    console.log("cell: ", cell)
+
+    const cellRange = selectedCellNameObj.Ref.split('!')[1]
+    console.log(`Cell range for "AC_!": ${cellRange}`)
+
+    const cellNumber = cellRange.replaceAll('$', '')
+    console.log(`Cell number of "${cellRange}": `, cellNumber)
+
+    console.log(`Cell info for cell "${cellNumber}": `, worksheet[cellNumber])
 
     if (typeof cell === 'undefined' || typeof cell?.v === 'undefined') {
-      XLSX.utils.sheet_add_aoa(worksheet, [[suggestedState]], {origin: 'M20'});
+      XLSX.utils.sheet_add_aoa(worksheet, [[suggestedState]], {origin: cellName});
     } else {
       cell.v = suggestedState;
     }
 
     // write to new file
     // formatting from OLD file will be lost!
-    XLSX.writeFile(workbook, 'CSSS Assessor Workbook.xlsx');
+    // XLSX.writeFile(workbook, 'CSSS Assessor Workbook.xlsx');
   }
 
   function getFormData() {
@@ -238,6 +236,7 @@ questionnaire:
   async function updateRowSaaS_SC8() {
     console.log("start update row SC8");
     let results;
+    let suggestedState
     try {
       results = await GCHTTPSRules();
     } catch (err) {
@@ -245,7 +244,8 @@ questionnaire:
       return -1;
     }
     console.log(results);
-    return suggestAssessmentState(results, "SC8", "S_DB_S", false, true);
+    suggestedState = suggestAssessmentState(results, "SC8", "S_DB_S", false, true);
+    await getSpreadsheet("SC", "SC8_DECISION");
   }
 
   function suggestAssessmentState(results, row, worksheet, canInherit = true, canBeFullyMet = false) {
@@ -257,9 +257,6 @@ questionnaire:
     let inherited = "";
     let outOfScope = false;
     let isInherited = false;
-
-    intTier = getTier();
-    console.log("getTier() == ", intTier) ;
 
     // TODO
     if (canInherit) {
@@ -279,26 +276,6 @@ questionnaire:
           decisionAidNeutral.push(message);
         }
       })
-
-      // print all messages
-      // if (decisionAidPositive.length > 0) {
-      //   console.log("Positives:", decisionAidPositive.length)
-      //   // decisionAidPositive.forEach((message) => {
-      //   //   console.log(message);
-      //   // })
-      // }
-      // if (decisionAidNegative.length > 0) {
-      //   console.log("Negatives:", decisionAidNegative.length);
-      //   // decisionAidPositive.forEach((message) => {
-      //   //   console.log(message);
-      //   // })
-      // }
-      // if (decisionAidNeutral.length > 0) {
-      //   console.log("Neutral:", decisionAidNeutral.length);
-      //   // decisionAidPositive.forEach((message) => {
-      //   //   console.log(message);
-      //   // })
-      // }
 
       if (canBeFullyMet) {
         if (decisionAidPositive.length > 0 && decisionAidNegative.length > 0){
@@ -341,11 +318,20 @@ questionnaire:
     return suggestedState;
   }
 
+  function isInherited(cellName, controlName) {
+    const intTier = getTier();
+    console.log("getTier() == ", intTier);
+    console.log("cellname: ", cellName);
+    console.log("controlName: ", controlName);
+  }
+
 </script>
 
 {% include views-vues/saas-assessment/saas-assessment-intro.html %}
 
-<button onclick="getSpreadsheet()">Print</button>
-
 {% include views-vues/saas-assessment/saas-assessment-questionnaire.html %}
+
+<br />
+<button onclick="updateRowSaaS_SC8()">Print</button>
+
 
