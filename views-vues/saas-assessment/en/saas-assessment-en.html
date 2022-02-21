@@ -112,12 +112,13 @@ questionnaire:
     }
   }
 
-  async function getSSLLabsData() {
+  async function requestScan() {
     const data = getFormData();
     const SaaSAddress = data["question-1"];
     /* TODO: handle CORS error */
     // const address = `https://api.ssllabs.com/api/v3/analyze?all=done&fromCache=on&maxAge=168&host=${SaaSAddress}`
-    const address = "/gcdigital-tools_outils-numeriquesgc/views-vues/saas-assessment/en/canada-ca_data.json"
+    // const address = "/gcdigital-tools_outils-numeriquesgc/views-vues/saas-assessment/en/canada-ca_data.json"
+    const address = `http://localhost:8000/scan/canada.ca`
 
     // if (SaaSAddress === "") {
     //   console.log("Please enter web address")
@@ -126,9 +127,7 @@ questionnaire:
 
     try {
       const res = await fetch(address);
-      const data = await res.json();
-      // console.log("data:", data);
-      return data;
+      return await res.json();
     } catch (e) {
       console.log("Error when fetching guidance: ", e);
     }
@@ -142,18 +141,16 @@ questionnaire:
     // get data
     try {
       guidance = await getTLSGuidance();
-      analysis = await getSSLLabsData();
+      analysis = await requestScan();
     } catch(err) {
       console.error("Error retrieving data:", err);
       return -1;
     }
 
-    analysis.endpoints.forEach(({ ipAddress, statusMessage, details }) => {
+    analysis.results.forEach(({ ipAddress, 'connectivity_status': statusMessage, details }) => {
       // handle error status messages
       if (
-        statusMessage === "No secure protocols supported" ||
-        statusMessage === "Internal Server error" ||
-        statusMessage === "Unable to connect to the server"
+        statusMessage === "ERROR"
       ) {
         // console.log("No secure protocols found on endpoint")
         results = [{
