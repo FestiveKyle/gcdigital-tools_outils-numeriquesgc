@@ -26,6 +26,8 @@ questionnaire:
 <script type="text/javascript" src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
 <script>
   async function getSpreadsheet(worksheetName, cellName, suggestedState) {
+    const data = getFormData();
+    const SaaSAddress = data["question-1"];
     let response
     let spreadsheetArrayBuffer
 
@@ -61,7 +63,7 @@ questionnaire:
 
     // write to new file
     // formatting from OLD file will be lost!
-    XLSX.writeFile(workbook, 'CSSS Assessor Workbook.xlsx');
+    XLSX.writeFile(workbook, `${SaaSAddress} - CSSS Assessor Workbook.xlsx`);
   }
 
   function getFormData() {
@@ -204,7 +206,7 @@ questionnaire:
                 returnValue: -1000,
                 decisionAidType: "C2",
                 message: `The use of ${tls_version_used} is discouraged.`
-              }); 
+              });
             }
           }
         }
